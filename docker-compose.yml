@@ -1,0 +1,150 @@
+name: lab-cloud-local
+
+services:
+  # Azure Storage local: Blob, Queue e Table
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: lab-azurite
+    profiles: ["azure", "full"]
+    command: "azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0"
+    ports:
+      - "10000:10000" # Blob
+      - "10001:10001" # Queue
+      - "10002:10002" # Table
+    volumes:
+      - azurite_data:/data
+
+  # SQL Server local
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: lab-sqlserver
+    profiles: ["azure", "database", "full"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "StrongPass123!"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+
+  # Redis para cache/filas simples
+  redis:
+    image: redis:7-alpine
+    container_name: lab-redis
+    profiles: ["azure", "database", "full"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # RabbitMQ com painel web
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: lab-rabbitmq
+    profiles: ["messaging", "full"]
+    ports:
+      - "5672:5672"     # AMQP
+      - "15672:15672"   # UI
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  # Kafka mais simples via Redpanda, compatível com protocolo Kafka
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: lab-redpanda
+    profiles: ["messaging", "full"]
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+    ports:
+      - "9092:9092"
+      - "9644:9644"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+
+  # Console web para Kafka/Redpanda
+  redpanda-console:
+    image: redpandadata/console:latest
+    container_name: lab-redpanda-console
+    profiles: ["messaging", "full"]
+    depends_on:
+      - redpanda
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports:
+      - "8081:8080"
+
+  # Postgres para apps de estudo
+  postgres:
+    image: postgres:16-alpine
+    container_name: lab-postgres
+    profiles: ["database", "full"]
+    environment:
+      POSTGRES_USER: lab
+      POSTGRES_PASSWORD: lab
+      POSTGRES_DB: labdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # MinIO: S3 compatível, útil para estudar storage tipo bucket
+  minio:
+    image: minio/minio:latest
+    container_name: lab-minio
+    profiles: ["storage", "full"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: admin12345
+    ports:
+      - "9000:9000" # API S3
+      - "9001:9001" # UI
+    volumes:
+      - minio_data:/data
+
+  # Prometheus para métricas
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: lab-prometheus
+    profiles: ["observability", "full"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  # Grafana para dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: lab-grafana
+    profiles: ["observability", "full"]
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  azurite_data:
+  sqlserver_data:
+  redis_data:
+  rabbitmq_data:
+  redpanda_data:
+  postgres_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:
